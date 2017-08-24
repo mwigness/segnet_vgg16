@@ -17,12 +17,88 @@ import fnmatch
 from color_map import *
 import shutil
 import sys
+import fnmatch
 try:
   import h5py
   import matplotlib.pyplot as plt
   from color_map import *
 except:
   pass
+
+def plot_generator():
+	accuracies=[]
+	for trial in range(1,6):
+		path=os.path.join(BASE_DIR,'all_models')
+		li=['retrain-'+str(i+1)+'layer-output' for i in range(6)]
+		rt=dict()
+		for name in li:
+			path1=os.path.join(path,name)
+			net_num=name.split('-')[1][0]
+
+			for name1 in os.listdir(path1):
+				path2=os.path.join(path1,name1,'trial'+str(trial))
+				rt[name.split('-')[1],name1.split('-')[0]]=np.load(os.path.join(path2,name.split('-')[1]+'_'+name1.split('-')[0]+'_'+'confmat.npy'))
+		for i in rt.keys():
+			print i
+		k1=['full','half','third','quarter']
+		k2=['%dlayer'%(i+1) for i in range(6)]
+		accuracies_trial=[]
+		for n in k1:
+			temp=[]
+			for p in k2:
+				temp.append(np.array(compute_acc(rt[p,n])).reshape(1,-1))
+			accuracies_trial.append(np.array(temp))
+		#print np.stack(accuracies_trial)
+		accuracies.append(np.stack(accuracies_trial))
+	print np.stack(accuracies)
+	print np.stack(accuracies).shape
+	np.save('accuracies.npy',accuracies)
+
+
+
+def logfile_parser()
+        for trial in range(1,6):
+                path=os.path.join(BASE_DIR,'all_models')
+                li=['retrain-'+str(i+1)+'layer-output' for i in range(6)]
+                rt=dict()
+                for name in li:
+                        path1=os.path.join(path,name)
+                        net_num=name.split('-')[1][0]
+			for name1 in os.listdir(path1):
+                                path2=os.path.join(path1,name1,'trial'+str(trial))
+                                rt[name.split('-')[1],name1.split('-')[0]]=file_parser(os.path.join(path2,'logfile_'+name1.split('-')[0]+name.split('-')[1]))
+                
+                k1=['full','half','third','quarter']
+                k2=['%dlayer'%(i+1) for i in range(6)]
+                accuracies_trial=[]
+                for n in k1:
+                        temp=[]
+                        for p in k2:
+                                temp.append(np.array(rt[p,n]).reshape([-1,2]))
+                        accuracies_trial.append(np.array(temp))
+                #print np.stack(accuracies_trial)
+                accuracies.append(np.stack(accuracies_trial))
+        print np.stack(accuracies)
+        print np.stack(accuracies).shape
+        #np.save('accuracies.npy',accuracies)
+
+def file_parser(filename):
+	f=open(filename,'r')
+	train_accs=[]
+	valid_accs=[]
+	content=f.readlines()
+
+	
+def compute_acc(conf_mat):
+	d=np.diag(conf_mat)
+	total_acc=np.sum(d)/np.sum(conf_mat)
+	er=np.zeros(conf_mat.shape)
+	for i in range(conf_mat.shape[0]):
+		er[i]=conf_mat[i,i]/np.sum(conf_mat[i,:])
+	mean_per_class=np.mean(er)
+	return [total_acc,mean_per_class]
+
+
 def call_segnet(net_num,num_classes):
 	return {
 		'1': N1.Segnet(keep_prob=0.5,num_classes=num_classes,is_gpu=True,desktop=False,weights_path=os.path.join(BASE_DIR,'segnet_road.npy')),
@@ -38,8 +114,8 @@ def call_segnet(net_num,num_classes):
 def test_models(trial=1):
 
 	path=os.path.join(BASE_DIR,'all_models')
-
-	for name in [i for i in os.listdir(path)]:
+	li=['retrain-'+str(i)+'layer-output' for i in [7,8]]	
+	for name in li:
 		print name
 		path1=os.path.join(path,name)
 		net_num=name.split('-')[1][0]
@@ -47,8 +123,10 @@ def test_models(trial=1):
 		batch_size_test=1
 		test_data_dir=os.path.join(BASE_DIR,'datasets/data/data-with-labels/lej15/','trial'+str(trial),'val_set/images/')
 		test_label_dir=os.path.join(BASE_DIR,'datasets/data/data-with-labels/lej15/','trial'+str(trial),'val_set/new_labels/')
+		#test_data_dir=os.path.join(BASE_DIR,'datasets/data/data-with-labels/b507/images/')
+                #test_label_dir=os.path.join(BASE_DIR,'datasets/data/data-with-labels/b507/new_labels/')
 
-		reader_test=image_reader(test_data_dir,test_label_dir,batch_size_test,image_size=[360,480,3],)
+		reader_test=image_reader(test_data_dir,test_label_dir,batch_size_test,image_size=[360,480,3])
 		image_size=reader_test.image_size
 		sess=tf.Session()
 		test_data = tf.placeholder(tf.float32,shape=[batch_size_test, image_size[0], image_size[1], image_size[2]])
@@ -73,7 +151,6 @@ def test_models(trial=1):
 			path2=os.path.join(path1,name1)
 			path2=os.path.join(path2,'trial'+str(trial))
 			print os.listdir(path2)
-
 			epoch_number=98
 			modelfile_name=os.path.join(path2,'modelfile_'+name1.split('-')[0]+name.split('-')[1]+'-'+str(epoch_number))
 			print modelfile_name
@@ -96,14 +173,17 @@ def test_models(trial=1):
 				count_test+=1
 				print name,name1,'epoch:',reader_test.epoch+1,', Batch:',reader_test.batch_num, ', correct pixels:', corr, ', Accuracy:',acc,'Aggregate_acc:',agg_acc
 				print '\n'
-				np.save(os.path.join(path2,name.split('-')[1]+'_'+name1.split('-')[0]+'_'+'confmat.npy'),conf_mat)
+			reader_test.reset_reader()
+			np.save(os.path.join(path2,name.split('-')[1]+'_'+name1.split('-')[0]+'_'+'confmat.npy'),conf_mat)
 				# sp.imsave('outimgs-'+'retrain_4layer_moment'+'-%d-%f.png'%(reader_test.batch_num,acc),viz[0,:])
+				
 				# sp.imsave('outimgs_real-'+'retrain_4layer_moment'+'-%d-%f.png'%(reader_test.batch_num,acc),test_data_batch[0,:])
-			tf.reset_default_graph()
+			
+		tf.reset_default_graph()
 
 if __name__=="__main__":
 	parser = ArgumentParser()
-	parser.add_argument('-devbox',type=int,default=0)
+	parser.add_argument('-devbox',type=int,default=1)
 	parser.add_argument('-ngpu',type=int,default=0)
 	parser.add_argument('-trial',type=int,default=-1)
 	args = parser.parse_args()
@@ -119,4 +199,6 @@ if __name__=="__main__":
 	else:
 	  BASE_DIR = '/home/sriram/intern'
 	  os.environ['CUDA_VISIBLE_DEVICES']="0"
-	test_models()
+	#for i in range(5):
+	#	test_models(i+1)
+	plot_generator()

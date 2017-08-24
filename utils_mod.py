@@ -275,7 +275,7 @@ def own_maxpool_withargmax(x,k_shape,stride,name):
 	x1=tf.transpose(x,[1,2,0,3])
 	x3=tf.reshape(x1,[shape[1]/k_shape[0],shape[2]/k_shape[1],-1])
 
-def transform_labels(pred1,label_img,num_classes,match_labels=None):
+def transform_labels1(pred1,label_img,num_classes,match_labels=None):
 	valid_labels=np.where(np.logical_and(label_img>=0,label_img<num_classes))
 	pred=pred1[valid_labels]
 	label_img=label_img[valid_labels]
@@ -329,13 +329,13 @@ def transform_labels(pred1,label_img,num_classes,match_labels=None):
 		if(cl not in non_labels):
 			t1=label_img==cl
 			for pl in range(num_classes):
-				t=np.where(np.logical_and(t1,modpred_img==pl))
+				t=np.where(np.logical_and(t1,pred==pl))
 				matr[cl,pl]=t[0].size
 
 	for cl in non_labels:
 		non_exist=non_exist+np.where(label_img==cl)[0].size
 	total_pix=modpred_img.size-non_exist
-	return [corr_pix,total_pix]
+	return [corr_pix,total_pix,matr]
 
 def upsample_with_pool_mask(updates, mask, ksize=[1, 2, 2, 1],out_shape=None,name=None):
 	input_shape=tf.shape(updates)

@@ -2,6 +2,7 @@ import numpy as np
 import scipy.misc as sp
 import glob
 from math import floor, ceil
+import fnmatch
 import os
 class image_reader():
 	def shuffle_data(self):
@@ -48,13 +49,13 @@ class image_reader():
 			residue=self.size-self.cursor;
 			self.chunk_labels=np.concatenate([self.label_files[-1*residue:],self.label_files[:self.batch_size-residue]])
 			self.cursor=0;
-			self.shuffle_data();
+			#self.shuffle_data();
 			# self.epoch=self.epoch+1;
 			# self.batch_num=0;
 		self.batch_num=self.batch_num+1
 
-		data=[sp.imresize(sp.imread(os.path.join(data_dir,i), mode='RGB'),[self.image_size[0],self.image_size[1]]) for i in self.chunk_labels];
-		lab=[sp.imresize(sp.imread(os.path.join(label_dir,i)),[self.image_size[0],self.image_size[1]],interp='nearest') for i in self.chunk_labels];
+		data=[sp.imresize(sp.imread(os.path.join(self.data_dir,i), mode='RGB'),[self.image_size[0],self.image_size[1]]) for i in self.chunk_labels];
+		lab=[sp.imresize(sp.imread(os.path.join(self.label_dir,i)),[self.image_size[0],self.image_size[1]],interp='nearest') for i in self.chunk_labels];
 		
 		return [np.stack(data),np.stack(lab)];
 
@@ -98,7 +99,7 @@ class single_reader():
 			# self.batch_num=0;
 		self.batch_num=self.batch_num+1
 
-		data=[sp.imresize(sp.imread(os.path.join(data_dir,i), mode='RGB'),[self.image_size[0],self.image_size[1]],interp='bicubic') for i in self.chunk_data];
+		data=[sp.imresize(sp.imread(os.path.join(self.data_dir,i), mode='RGB'),[self.image_size[0],self.image_size[1]],interp='bicubic') for i in self.chunk_data];
 		return np.stack(data);
 
 

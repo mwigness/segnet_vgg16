@@ -16,7 +16,7 @@ except:
   pass
 
 class Segnet():
-	def __init__(self,keep_prob,num_classes,is_gpu,desktop=True,weights_path=None,pretrained=False):
+	def __init__(self,keep_prob,num_classes,is_gpu,desktop=False,weights_path=None,pretrained=False):
 		self.num_classes = num_classes
 		self.keep_prob = keep_prob
 		self.is_gpu=is_gpu
@@ -900,10 +900,10 @@ if __name__=="__main__":
 	mfile_names=['modelfile_'+i+str(n_layers)+'layer'for i in lis]
 	lfile_names=['logfile_'+i+str(n_layers)+'layer' for i in lis]
 
-	train_data_dir=os.path.join(BASE_DIR,'datasets/data/data-with-labels/lej15/training_set/images/')
-	train_label_dir=os.path.join(BASE_DIR,'datasets/data/data-with-labels/lej15/training_set/new_labels/')
-	test_data_dir=os.path.join(BASE_DIR,'datasets/data/data-with-labels/lej15/val_set/images/')
-	test_label_dir=os.path.join(BASE_DIR,'datasets/data/data-with-labels/lej15/val_set/new_labels/')
+	train_data_dir=os.path.join(BASE_DIR,'datasets/data/data-with-labels/lej15/trial%d/training_set/images/'%args.trial)
+	train_label_dir=os.path.join(BASE_DIR,'datasets/data/data-with-labels/lej15/trial%d/training_set/new_labels/'%args.trial)
+	test_data_dir=os.path.join(BASE_DIR,'datasets/data/data-with-labels/lej15/trial%d/val_set/images/'%args.trial)
+	test_label_dir=os.path.join(BASE_DIR,'datasets/data/data-with-labels/lej15/trial%d/val_set/new_labels/'%args.trial)
 	
 
 	total=len(os.listdir(train_data_dir))
@@ -934,7 +934,7 @@ if __name__=="__main__":
 			shutil.copy(os.path.join(train_data_dir,name),scratch_train_data_dir)
 			shutil.copy(os.path.join(train_label_dir,name),scratch_train_label_dir)
 		
-		train_segnet(os.path.join(outdir,modelfile_name),os.path.join(logfile_name),scratch_train_data_dir,scratch_train_label_dir)
+		train_segnet(os.path.join(outdir,modelfile_name),os.path.join(outdir,logfile_name),scratch_train_data_dir,scratch_train_label_dir)
 		tf.reset_default_graph()
 
 	# test_segnet()

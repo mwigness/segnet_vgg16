@@ -640,8 +640,8 @@ def predict_segnet():
 def evaluate_segnet_camvid():   
 	#gives 87.7% accuracy on 11 common classes
 	
-	pred_path='/home/sriram/intern/datasets/SegNet_Output/CamVid_Output/'
-	labels_path='/home/sriram/intern/datasets/CamVid/'
+	pred_path='/home/root/segnet_vgg16/SegNet-Tutorial/camvid-output-maggie/'
+	labels_path='/home/root/segnet_vgg16/SegNet-Tutorial/CamVid/'
 	num_classes=12
 	file=open('camvid_match_labels.txt')
 	match_labels=file.readlines()
@@ -677,14 +677,14 @@ def evaluate_segnet_camvid():
 			s=s+accuracy
 			count=count+1
 			agg_acc=s/count
-			# print i,prediction,'img accuracy:',accuracy, 'aggregate accuracy:',agg_acc
-			# print '\n'
-	# print 'train_matrix',train_matr
-	# print 'val_matrix',val_matr
-	# print 'test_matrix',test_matr
-	np.save(os.path.join(pred_path,'train_conf_matrix.npy'),train_matr)
-	np.save(os.path.join(pred_path,'val_conf_matrix.npy'),val_matr)
-	np.save(os.path.join(pred_path,'test_conf_matrix.npy'),test_matr)
+			print i,prediction,'img accuracy:',accuracy, 'aggregate accuracy:',agg_acc
+			print '\n'
+	print 'train_matrix',train_matr
+	print 'val_matrix',val_matr
+	print 'test_matrix',test_matr
+	#np.save(os.path.join(pred_path,'train_conf_matrix.npy'),train_matr)
+	#np.save(os.path.join(pred_path,'val_conf_matrix.npy'),val_matr)
+	#np.save(os.path.join(pred_path,'test_conf_matrix.npy'),test_matr)
 
 def evaluate_segnet_camvid_small():
         #gives 87.7% accuracy on 11 common classes
