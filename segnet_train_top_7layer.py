@@ -355,22 +355,22 @@ class Segnet():
 		# self.logits=fc_convol(conv_decode1,[1,1],self.num_classes,name='fc_classify1',params=self.params);  
 		return conv1_1_D;
 
-def train_segnet(modelfile_name,logfile_name,train_data_dir,train_label_dir):
+def train_segnet(modelfile_name,logfile_name,train_data_dir,train_label_dir,test_data_dir,test_label_dir,outdir):
 	num_classes=8
-	n_epochs=100
-	batch_size_train=3
-	batch_size_valid=1
+	n_epochs=5000
+	batch_size_train=5
+	batch_size_valid=10
 	lr_decay_every=5
-	validate_every=3
-	save_every=49
-	base_lr=5e-5
+	validate_every=5
+	save_every=1000
+	base_lr=1e-6
 	img_size=[360,480]
 	#modelfile_name='retrain_4layer_moment'
 	#logfile_name='lej_retrain_4layer_moment'
 	#train_data_dir=os.path.join(BASE_DIR,'datasets/data/data-with-labels/lej15/training_set/images/')
 	#train_label_dir=os.path.join(BASE_DIR,'datasets/data/data-with-labels/lej15/training_set/new_labels/')
-	test_data_dir=os.path.join(BASE_DIR,'datasets/data/data-with-labels/lej15/val_set/images/')
-	test_label_dir=os.path.join(BASE_DIR,'datasets/data/data-with-labels/lej15/val_set/new_labels/')
+	#test_data_dir=os.path.join(BASE_DIR,'datasets/data/data-with-labels/lej15/val_set/images/')
+	#test_label_dir=os.path.join(BASE_DIR,'datasets/data/data-with-labels/lej15/val_set/new_labels/')
 	
 	#train_data_dir=os.path.join(BASE_DIR,'SegNet-Tutorial/CamVid/train/')
 	#train_label_dir=os.path.join(BASE_DIR,'SegNet-Tutorial/CamVid/trainannot/')
@@ -397,11 +397,11 @@ def train_segnet(modelfile_name,logfile_name,train_data_dir,train_label_dir):
 	valid_logits=net.inference(valid_data, is_training=False,reuse=True)
 	print 'built network'
 
-	file=open(os.path.join('camvid_match_labels.txt'))
-	match_labels=file.readlines()
-	file.close()
-	match_labels=[line.splitlines()[0].split(' ') for line in match_labels]
-	net.match_labels=match_labels
+	#file=open(os.path.join('camvid_match_labels.txt'))
+	#match_labels=file.readlines()
+	#file.close()
+	#match_labels=[line.splitlines()[0].split(' ') for line in match_labels]
+	#net.match_labels=match_labels
 
 	net.loss=net.calc_loss(train_logits,train_labels,net.num_classes)
 	#learning_rate=tf.train.exponential_decay(base_lr,count,1,1.0/rate)
@@ -424,10 +424,12 @@ def train_segnet(modelfile_name,logfile_name,train_data_dir,train_label_dir):
 	# saver.restore(sess,'segnet_model')
 	print 'initialized vars'
 	cnt=0
-	dec=4
-	colors=color_map(num_classes)
+	#dec=4
+	#colors=color_map(num_classes)
 	lr_calc=base_lr
-
+	train_accuracy=[]
+	valid_accuracy=[]
+	perclass_accuracy=[]
 	while(reader.epoch<n_epochs):
 		s_train=0;cnt_train=1	
 		while(reader.batch_num<reader.n_batches):
@@ -435,16 +437,20 @@ def train_segnet(modelfile_name,logfile_name,train_data_dir,train_label_dir):
 			
 			feed_dict_train={train_data:train_data_batch,train_labels:train_label_batch,learning_rate:lr_calc}
 			[pred,_]=sess.run([prediction_train,net.train_op],feed_dict=feed_dict_train)
-			[corr,total_pix]=transform_labels(pred,train_label_batch,match_labels,num_classes)
+			[corr,total_pix]=transform_labels(pred,train_label_batch,num_classes)
 			acc=corr*1.0/total_pix
 			s_train=s_train+acc
 			print 'Learning_rate:',lr_calc,'epoch:',reader.epoch+1,', Batch:',reader.batch_num, ', correct pixels:', corr, ', Accuracy:',acc,'aggregate_acc:',s_train*1.0/cnt_train
-			f_train.write('Training'+' learning_rate:'+str(lr_calc)+' epoch:'+str(reader.epoch+1)+' Batch:'+str(reader.batch_num)+' Accuracy:'+str(acc)+' aggregate_acc'+str(s_train*1.0/cnt_train)+'\n')
+			#f_train.write('Training'+' learning_rate:'+str(lr_calc)+' epoch:'+str(reader.epoch+1)+' Batch:'+str(reader.batch_num)+' Accuracy:'+str(acc)+' aggregate_acc'+str(s_train*1.0/cnt_train)+'\n')
 			cnt_train+=1
+		train_accuracy.append(s_train*1.0/(cnt_train-1))
+		
 
 		if((reader.epoch+1)%save_every==0):
 			saver.save(sess,modelfile_name,global_step=(reader.epoch+1))
-
+			np.save(os.path.join(outdir,'train_acc.npy'),np.array(train_accuracy))
+			np.save(os.path.join(outdir,'valid_acc.npy'),np.array(valid_accuracy))
+			np.save(os.path.join(outdir,'perclass_acc.npy'),np.array(perclass_accuracy))
 		if((reader.epoch+1)%validate_every==0):
 			reader_valid.reset_reader()
 			s_valid=0;cnt_valid=1
@@ -453,14 +459,17 @@ def train_segnet(modelfile_name,logfile_name,train_data_dir,train_label_dir):
 				[valid_data_batch,valid_label_batch]=reader_valid.next_batch()
 				feed_dict_validate={valid_data:valid_data_batch,valid_labels:valid_label_batch}
 				pred_valid=sess.run(prediction_valid,feed_dict=feed_dict_validate);
-				[corr,total_pix]=transform_labels(pred_valid,valid_label_batch,match_labels,num_classes)
+				[corr,total_pix,per_class]=transform_labels_perclass(pred_valid,valid_label_batch,num_classes)
 				acc=corr*1.0/total_pix
 				s_valid=s_valid+acc
 				
 
 				print 'epoch:',reader_valid.epoch+1,', Batch:',reader_valid.batch_num, ', correct pixels:', corr, ', Accuracy:',acc,' aggregate acc:',s_valid*1.0/cnt_valid
-				f_train.write('Validation'+' epoch:'+str(reader_valid.epoch+1)+' Batch:'+str(reader_valid.batch_num)+' Accuracy:'+str(acc)+' aggregate_acc'+str(s_valid*1.0/cnt_valid)+'\n')
+				#f_train.write('Validation'+' epoch:'+str(reader_valid.epoch+1)+' Batch:'+str(reader_valid.batch_num)+' Accuracy:'+str(acc)+' aggregate_acc'+str(s_valid*1.0/cnt_valid)+'\n')
 				cnt_valid+=1
+			valid_accuracy.append(s_valid*1.0/(cnt_valid-1))
+                        perclass_accuracy.append(per_class)
+
 			#print 'Change lr/Save model?'
 			#char=raw_input()
 			#if(char=='c'):
@@ -509,18 +518,17 @@ def transform_labels_perclass(pred1,label_img,num_classes,match_labels=None):
         pred=pred1[valid_labels]
         label_img=label_img[valid_labels]
         non_labels=[]
-        modpred_img=-1*np.ones(pred.shape)
+        #modpred_img=-1*np.ones(pred.shape)
         #modpred_img=pred[:]
         non_exist=0
         #for cl in range(num_classes):
         #       t=np.where(pred==cl)
         #       modpred_img[t]=int(match_labels[cl][-1])
         corr_pix=np.where(pred==label_img)[0].size
-        per_class1=np.zeros([num_classes])
-        per_class2=np.zeros([num_classes])
+        per_class=np.zeros([num_classes])
         for cl in range(num_classes):
-               per_class1[cl]=np.where(np.logical_and(pred==cl,label_img==cl))[0].size*1.0/(np.where(label_img==cl)[0].size+1e-10)
-               per_class2[cl]=np.where(label_img==cl)[0].size
+               per_class[cl]=np.where(np.logical_and(pred==cl,label_img==cl))[0].size*1.0/(np.where(label_img==cl)[0].size+1e-10)
+               #per_class2[cl]=np.where(label_img==cl)[0].size
 
         # su=0;matr=np.zeros([num_classes,num_classes])
         # for cl in range(num_classes):
@@ -532,8 +540,8 @@ def transform_labels_perclass(pred1,label_img,num_classes,match_labels=None):
 
         for cl in non_labels:
                 non_exist=non_exist+np.where(label_img==cl)[0].size
-        total_pix=modpred_img.size-non_exist
-        return [corr_pix,total_pix,per_class1,per_class2]
+        total_pix=pred.size-non_exist
+        return [corr_pix,total_pix,per_class]
 def test_segnet():
 
 	num_classes=8
@@ -879,7 +887,7 @@ def save_hdf5(sess,var_list):
 
 if __name__=="__main__":
 	parser = ArgumentParser()
-	parser.add_argument('-devbox',type=int,default=0)
+	parser.add_argument('-devbox',type=int,default=1)
 	parser.add_argument('-ngpu',type=int,default=0)
 	parser.add_argument('-trial',type=int,default=-1)
 	args = parser.parse_args()
@@ -907,34 +915,41 @@ if __name__=="__main__":
 	
 
 	total=len(os.listdir(train_data_dir))
+	print 'total imgs',total
 	tr_num=[int(total),int(total/2),int(total/3),int(total/4)]
 	scratch_train_data_dir=os.path.abspath('./scratch_train_data_dir'+str(n_layers))
 	scratch_train_label_dir=os.path.abspath('./scratch_train_label_dir'+str(n_layers))
-	if not os.path.isdir(scratch_train_data_dir):
-		os.makedirs(scratch_train_data_dir)
-	if not os.path.isdir(scratch_train_label_dir):
-		os.makedirs(scratch_train_label_dir)
+	if os.path.isdir(scratch_train_data_dir):
+		shutil.rmtree(scratch_train_data_dir)
+	if os.path.isdir(scratch_train_label_dir):
+		shutil.rmtree(scratch_train_label_dir)
 
 	for modelfile_name,logfile_name,n_train_samples,outdir in zip(mfile_names,lfile_names,tr_num,mfile_outdirs):
+		print n_train_samples
+		print modelfile_name
+		print logfile_name
 		outdir = os.path.join(os.getcwd(),outdir)
 		if not os.path.isdir(outdir):
 			os.system('mkdir -p %s'%outdir)
-	
-			
-		if(len(os.listdir(scratch_train_data_dir))!=0):
-			for name in os.listdir(scratch_train_data_dir):
-				os.remove(os.path.join(scratch_train_data_dir,name))
-		if(len(os.listdir(scratch_train_label_dir))!=0):
-			for name in os.listdir(scratch_train_label_dir):
-				os.remove(os.path.join(scratch_train_label_dir,name))
 
-		rand_index=np.random.randint(0,total,[n_train_samples])
+		if os.path.isdir(scratch_train_data_dir):
+                	shutil.rmtree(scratch_train_data_dir)
+        	if os.path.isdir(scratch_train_label_dir):
+                	shutil.rmtree(scratch_train_label_dir)
+		os.makedirs(scratch_train_data_dir)
+		os.makedirs(scratch_train_label_dir)
+		rand_index=range(total)
+		np.random.shuffle(rand_index)
+		rand_index=rand_index[:n_train_samples]
+		#rand_index=np.random.randint(0,total,[n_train_samples])
+		#print 'rand lenght', np.unique(rand_index).size
 		image_filenames=np.array(fnmatch.filter(os.listdir(train_data_dir),'*.png'))[rand_index]
+		#print np.unique(image_filenames).size
 		for name in image_filenames:
 			shutil.copy(os.path.join(train_data_dir,name),scratch_train_data_dir)
 			shutil.copy(os.path.join(train_label_dir,name),scratch_train_label_dir)
 		
-		train_segnet(os.path.join(outdir,modelfile_name),os.path.join(outdir,logfile_name),scratch_train_data_dir,scratch_train_label_dir)
+		train_segnet(os.path.join(outdir,modelfile_name),os.path.join(outdir,logfile_name),scratch_train_data_dir,scratch_train_label_dir,test_data_dir,test_label_dir,outdir)
 		tf.reset_default_graph()
 
 	# test_segnet()

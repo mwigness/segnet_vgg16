@@ -46,6 +46,7 @@ def plot_generator():
 		for n in k1:
 			temp=[]
 			for p in k2:
+				
 				temp.append(np.array(compute_acc(rt[p,n])).reshape(1,-1))
 			accuracies_trial.append(np.array(temp))
 		#print np.stack(accuracies_trial)
@@ -56,8 +57,9 @@ def plot_generator():
 
 
 
-def logfile_parser()
-        for trial in range(1,6):
+def logfile_parser():
+	accuracies=[]
+        for trial in range(1,2):
                 path=os.path.join(BASE_DIR,'all_models')
                 li=['retrain-'+str(i+1)+'layer-output' for i in range(6)]
                 rt=dict()
@@ -66,27 +68,48 @@ def logfile_parser()
                         net_num=name.split('-')[1][0]
 			for name1 in os.listdir(path1):
                                 path2=os.path.join(path1,name1,'trial'+str(trial))
-                                rt[name.split('-')[1],name1.split('-')[0]]=file_parser(os.path.join(path2,'logfile_'+name1.split('-')[0]+name.split('-')[1]))
-                
+				plts=file_parser(os.path.join(path2,'logfile_'+name1.split('-')[0]+name.split('-')[1]),name1.split('-')[0])
+				print name.split('-')[1],name1.split('-')[0]
+				print 'trial',trial,'list stat',plts.shape
+                                rt[name.split('-')[1],name1.split('-')[0]]=plts            
                 k1=['full','half','third','quarter']
                 k2=['%dlayer'%(i+1) for i in range(6)]
                 accuracies_trial=[]
                 for n in k1:
                         temp=[]
                         for p in k2:
-                                temp.append(np.array(rt[p,n]).reshape([-1,2]))
+                                temp.append(rt[p,n].reshape([2,-1]))
                         accuracies_trial.append(np.array(temp))
                 #print np.stack(accuracies_trial)
                 accuracies.append(np.stack(accuracies_trial))
-        print np.stack(accuracies)
+        #print np.stack(accuracies)
         print np.stack(accuracies).shape
-        #np.save('accuracies.npy',accuracies)
+        np.save('acc_plots.npy',np.stack(accuracies))
 
-def file_parser(filename):
+def file_parser(filename,amt):
 	f=open(filename,'r')
 	train_accs=[]
-	valid_accs=[]
+	val_accs=[]
 	content=f.readlines()
+	f.close()
+	i=0
+	while(int(content[i].split(' ')[2][-1])==1):
+		i+=1
+		#print i
+	val=i
+	total_len=len(content)
+	rl=[val,2*val,3*val,3*val+100]
+	while(rl[-1]<total_len):
+		for index,i in enumerate(rl):
+			if(index==3):
+				val_accs.append(float(content[i-1].split(' ')[-1][13:]))
+			else:
+				train_accs.append(float(content[i-1].split(' ')[-1][13:]))
+		rl=[i+3*val+100 for i in rl]
+	val_accs=val_accs+[0]*(len(train_accs)-len(val_accs))
+	print train_accs
+	print val_accs
+        return np.array([train_accs,val_accs])
 
 	
 def compute_acc(conf_mat):
@@ -201,4 +224,5 @@ if __name__=="__main__":
 	  os.environ['CUDA_VISIBLE_DEVICES']="0"
 	#for i in range(5):
 	#	test_models(i+1)
-	plot_generator()
+	logfile_parser()
+	#plot_generator()

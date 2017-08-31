@@ -7,6 +7,7 @@ from argparse import ArgumentParser
 import fnmatch
 from color_map import *
 import shutil
+import sys
 try:
   import h5py
   import matplotlib.pyplot as plt
@@ -30,7 +31,14 @@ class Segnet():
 		self.x=x
 		self.is_training=is_training
 		self.reuse=reuse
-		self.logits=self.build_network()
+		if(self.is_gpu==True and self.desktop==True):
+			with tf.device('/cpu:0'):
+				self.logits=self.build_network()
+		elif(self.is_gpu==True and self.desktop==False):
+			self.logits=self.build_network()
+		elif(self.is_gpu==False):
+			with tf.device('/cpu:0'):
+				self.logits=self.build_network()
 		return self.logits
 
 	def calc_loss(self,logits,labels,num_classes,weighted=False,weights=None):
@@ -68,6 +76,7 @@ class Segnet():
 		# with tf.variable_scope('preprocess',dtype=tf.float32):
 		# 	mean = tf.constant([123.68, 116.779, 103.939], dtype=tf.float32, shape=[1, 1, 1, 3], name='img_mean')
 		# 	self.inp_tensor = self.x-mean;
+
 		self.inp_tensor=self.x
 
 		conv1_1=conv_bn(self.inp_tensor,[3,3],64,[1,1],name='conv1_1',phase_train=self.is_training,params=self.params,reuse=self.reuse);
@@ -346,22 +355,22 @@ class Segnet():
 		# self.logits=fc_convol(conv_decode1,[1,1],self.num_classes,name='fc_classify1',params=self.params);  
 		return conv1_1_D;
 
-def train_segnet(modelfile_name,logfile_name,train_data_dir,train_label_dir):
+def train_segnet(modelfile_name,logfile_name,train_data_dir,train_label_dir,test_data_dir,test_label_dir,outdir):
 	num_classes=8
-	n_epochs=100
-	batch_size_train=3
-	batch_size_valid=1
+	n_epochs=5000
+	batch_size_train=5
+	batch_size_valid=10
 	lr_decay_every=5
-	validate_every=3
-	save_every=49
-	base_lr=5e-5
+	validate_every=5
+	save_every=1000
+	base_lr=1e-6
 	img_size=[360,480]
 	#modelfile_name='retrain_4layer_moment'
 	#logfile_name='lej_retrain_4layer_moment'
 	#train_data_dir=os.path.join(BASE_DIR,'datasets/data/data-with-labels/lej15/training_set/images/')
 	#train_label_dir=os.path.join(BASE_DIR,'datasets/data/data-with-labels/lej15/training_set/new_labels/')
-	test_data_dir=os.path.join(BASE_DIR,'datasets/data/data-with-labels/lej15/val_set/images/')
-	test_label_dir=os.path.join(BASE_DIR,'datasets/data/data-with-labels/lej15/val_set/new_labels/')
+	#test_data_dir=os.path.join(BASE_DIR,'datasets/data/data-with-labels/lej15/val_set/images/')
+	#test_label_dir=os.path.join(BASE_DIR,'datasets/data/data-with-labels/lej15/val_set/new_labels/')
 	
 	#train_data_dir=os.path.join(BASE_DIR,'SegNet-Tutorial/CamVid/train/')
 	#train_label_dir=os.path.join(BASE_DIR,'SegNet-Tutorial/CamVid/trainannot/')
@@ -388,11 +397,11 @@ def train_segnet(modelfile_name,logfile_name,train_data_dir,train_label_dir):
 	valid_logits=net.inference(valid_data, is_training=False,reuse=True)
 	print 'built network'
 
-	file=open(os.path.join('camvid_match_labels.txt'))
-	match_labels=file.readlines()
-	file.close()
-	match_labels=[line.splitlines()[0].split(' ') for line in match_labels]
-	net.match_labels=match_labels
+	#file=open(os.path.join('camvid_match_labels.txt'))
+	#match_labels=file.readlines()
+	#file.close()
+	#match_labels=[line.splitlines()[0].split(' ') for line in match_labels]
+	#net.match_labels=match_labels
 
 	net.loss=net.calc_loss(train_logits,train_labels,net.num_classes)
 	#learning_rate=tf.train.exponential_decay(base_lr,count,1,1.0/rate)
@@ -415,10 +424,12 @@ def train_segnet(modelfile_name,logfile_name,train_data_dir,train_label_dir):
 	# saver.restore(sess,'segnet_model')
 	print 'initialized vars'
 	cnt=0
-	dec=4
-	colors=color_map(num_classes)
+	#dec=4
+	#colors=color_map(num_classes)
 	lr_calc=base_lr
-
+	train_accuracy=[]
+	valid_accuracy=[]
+	perclass_accuracy=[]
 	while(reader.epoch<n_epochs):
 		s_train=0;cnt_train=1	
 		while(reader.batch_num<reader.n_batches):
@@ -426,16 +437,20 @@ def train_segnet(modelfile_name,logfile_name,train_data_dir,train_label_dir):
 			
 			feed_dict_train={train_data:train_data_batch,train_labels:train_label_batch,learning_rate:lr_calc}
 			[pred,_]=sess.run([prediction_train,net.train_op],feed_dict=feed_dict_train)
-			[corr,total_pix]=transform_labels(pred,train_label_batch,match_labels,num_classes)
+			[corr,total_pix]=transform_labels(pred,train_label_batch,num_classes)
 			acc=corr*1.0/total_pix
 			s_train=s_train+acc
 			print 'Learning_rate:',lr_calc,'epoch:',reader.epoch+1,', Batch:',reader.batch_num, ', correct pixels:', corr, ', Accuracy:',acc,'aggregate_acc:',s_train*1.0/cnt_train
-			f_train.write('Training'+' learning_rate:'+str(lr_calc)+' epoch:'+str(reader.epoch+1)+' Batch:'+str(reader.batch_num)+' Accuracy:'+str(acc)+' aggregate_acc'+str(s_train*1.0/cnt_train)+'\n')
+			#f_train.write('Training'+' learning_rate:'+str(lr_calc)+' epoch:'+str(reader.epoch+1)+' Batch:'+str(reader.batch_num)+' Accuracy:'+str(acc)+' aggregate_acc'+str(s_train*1.0/cnt_train)+'\n')
 			cnt_train+=1
+		train_accuracy.append(s_train*1.0/(cnt_train-1))
+		
 
 		if((reader.epoch+1)%save_every==0):
 			saver.save(sess,modelfile_name,global_step=(reader.epoch+1))
-
+			np.save(os.path.join(outdir,'train_acc.npy'),np.array(train_accuracy))
+			np.save(os.path.join(outdir,'valid_acc.npy'),np.array(valid_accuracy))
+			np.save(os.path.join(outdir,'perclass_acc.npy'),np.array(perclass_accuracy))
 		if((reader.epoch+1)%validate_every==0):
 			reader_valid.reset_reader()
 			s_valid=0;cnt_valid=1
@@ -444,14 +459,17 @@ def train_segnet(modelfile_name,logfile_name,train_data_dir,train_label_dir):
 				[valid_data_batch,valid_label_batch]=reader_valid.next_batch()
 				feed_dict_validate={valid_data:valid_data_batch,valid_labels:valid_label_batch}
 				pred_valid=sess.run(prediction_valid,feed_dict=feed_dict_validate);
-				[corr,total_pix]=transform_labels(pred_valid,valid_label_batch,match_labels,num_classes)
+				[corr,total_pix,per_class]=transform_labels_perclass(pred_valid,valid_label_batch,num_classes)
 				acc=corr*1.0/total_pix
 				s_valid=s_valid+acc
 				
 
 				print 'epoch:',reader_valid.epoch+1,', Batch:',reader_valid.batch_num, ', correct pixels:', corr, ', Accuracy:',acc,' aggregate acc:',s_valid*1.0/cnt_valid
-				f_train.write('Validation'+' epoch:'+str(reader_valid.epoch+1)+' Batch:'+str(reader_valid.batch_num)+' Accuracy:'+str(acc)+' aggregate_acc'+str(s_valid*1.0/cnt_valid)+'\n')
+				#f_train.write('Validation'+' epoch:'+str(reader_valid.epoch+1)+' Batch:'+str(reader_valid.batch_num)+' Accuracy:'+str(acc)+' aggregate_acc'+str(s_valid*1.0/cnt_valid)+'\n')
 				cnt_valid+=1
+			valid_accuracy.append(s_valid*1.0/(cnt_valid-1))
+                        perclass_accuracy.append(per_class)
+
 			#print 'Change lr/Save model?'
 			#char=raw_input()
 			#if(char=='c'):
@@ -464,7 +482,7 @@ def train_segnet(modelfile_name,logfile_name,train_data_dir,train_label_dir):
 		reader.epoch=reader.epoch+1
 		reader.batch_num=0
 
-def transform_labels(pred1,label_img,match_labels,num_classes):
+def transform_labels(pred1,label_img,num_classes,match_labels=None):
 	valid_labels=np.where(np.logical_and(label_img>=0,label_img<num_classes))
 	pred=pred1[valid_labels]
 	label_img=label_img[valid_labels]
@@ -495,23 +513,22 @@ def transform_labels(pred1,label_img,match_labels,num_classes):
 	total_pix=modpred_img.size-non_exist
 	return [corr_pix,total_pix]
 
-def transform_labels_perclass(pred1,label_img,match_labels,num_classes):
+def transform_labels_perclass(pred1,label_img,num_classes,match_labels=None):
  	valid_labels=np.where(np.logical_and(label_img>=0,label_img<num_classes))
         pred=pred1[valid_labels]
         label_img=label_img[valid_labels]
         non_labels=[]
-        modpred_img=-1*np.ones(pred.shape)
+        #modpred_img=-1*np.ones(pred.shape)
         #modpred_img=pred[:]
         non_exist=0
         #for cl in range(num_classes):
         #       t=np.where(pred==cl)
         #       modpred_img[t]=int(match_labels[cl][-1])
         corr_pix=np.where(pred==label_img)[0].size
-        per_class1=np.zeros([num_classes])
-        per_class2=np.zeros([num_classes])
+        per_class=np.zeros([num_classes])
         for cl in range(num_classes):
-               per_class1[cl]=np.where(np.logical_and(pred==cl,label_img==cl))[0].size*1.0/(np.where(label_img==cl)[0].size+1e-10)
-               per_class2[cl]=np.where(label_img==cl)[0].size
+               per_class[cl]=np.where(np.logical_and(pred==cl,label_img==cl))[0].size*1.0/(np.where(label_img==cl)[0].size+1e-10)
+               #per_class2[cl]=np.where(label_img==cl)[0].size
 
         # su=0;matr=np.zeros([num_classes,num_classes])
         # for cl in range(num_classes):
@@ -523,8 +540,8 @@ def transform_labels_perclass(pred1,label_img,match_labels,num_classes):
 
         for cl in non_labels:
                 non_exist=non_exist+np.where(label_img==cl)[0].size
-        total_pix=modpred_img.size-non_exist
-        return [corr_pix,total_pix,per_class1,per_class2]
+        total_pix=pred.size-non_exist
+        return [corr_pix,total_pix,per_class]
 def test_segnet():
 
 	num_classes=8
@@ -533,21 +550,23 @@ def test_segnet():
 	train_label_dir='SegNet-Tutorial/CamVid/trainannot/'
 	#test_data_dir='SegNet-Tutorial/CamVid/test/'
 	#test_label_dir='SegNet-Tutorial/CamVid/testannot/'
-	test_data_dir=os.path.join(BASE_DIR,'datasets/data/data-with-labels/lej15/testing_set/images/')
-        test_label_dir=os.path.join(BASE_DIR,'datasets/data/data-with-labels/lej15/testing_set/new_labels/')
+	data_file_list=''
 
-	modelfile_name='retrain_models/retrain_4layer_moment'
-	epoch_number=99
+	test_data_dir=os.path.join(BASE_DIR,'datasets/data/data-with-labels/lej15/testing_set/images/')
+	test_label_dir=os.path.join(BASE_DIR,'datasets/data/data-with-labels/lej15/testing_set/new_labels/')
+
+	modelfile_name='/home/sriram/intern/models-trial1/retrain-7layer-output/full-training/trial1/modelfile_full7layer'
+	epoch_number=98
 	# test_data_dir='/home/sriram/intern/datasets/pascal/VOC2011/jpeg_images/'
 	# test_label_dir='/home/sriram/intern/datasets/pascal/VOC2011/labels/'
-	reader_test=image_reader(test_data_dir,test_label_dir,batch_size_test,image_size=[360,480,3])
+	reader_test=image_reader(test_data_dir,test_label_dir,batch_size_test,image_size=[360,480,3],file_name_list=data_file_list)
 	image_size=reader_test.image_size
 
 	sess=tf.Session()
 	test_data = tf.placeholder(tf.float32,shape=[batch_size_test, image_size[0], image_size[1], image_size[2]])
 	test_labels = tf.placeholder(tf.int64, shape=[batch_size_test, image_size[0], image_size[1]])
 
-	net=Segnet(keep_prob=0.5,num_classes=num_classes,is_gpu=True,weights_path='segnet_road.npy')
+	net=Segnet(keep_prob=0.5,num_classes=num_classes,is_gpu=True,weights_path=os.path.join(BASE_DIR,'segnet_road.h5'))
 	test_logits=net.inference(test_data,is_training=False,reuse=False);
 	print 'built network';
 	prediction=tf.argmax(test_logits,axis=3);
@@ -557,19 +576,18 @@ def test_segnet():
 	sess.run(tf.global_variables_initializer())
 	print 'initialized vars'
 	moment_vars=[]
-        for var in tf.global_variables():
-                if('moving_mean' in var.name or 'moving_variance' in var.name):
-                        moment_vars.append(var)
-
-        saver=tf.train.Saver(tf.trainable_variables()+moment_vars)
+	for var in tf.global_variables():
+		if('moving_mean' in var.name or 'moving_variance' in var.name):
+			moment_vars.append(var)
+	saver=tf.train.Saver(tf.trainable_variables()+moment_vars)
 
 	saver.restore(sess,modelfile_name+'-'+str(epoch_number))
 	print 'restored model'
 	# plt.ion()
-	file=open(os.path.join('camvid_match_labels.txt'))
-	match_labels=file.readlines()
-	file.close()
-	match_labels=[line.splitlines()[0].split(' ') for line in match_labels]
+	# file=open(os.path.join('camvid_match_labels.txt'))
+	# match_labels=file.readlines()
+	# file.close()
+	# match_labels=[line.splitlines()[0].split(' ') for line in match_labels]
 	
 	colors=color_map(num_classes)
 	s_test=0;count_test=1
@@ -577,12 +595,11 @@ def test_segnet():
 		[test_data_batch,test_label_batch]=reader_test.next_batch();
 		feed_dict={test_data:test_data_batch,test_labels:test_label_batch};
 		pred=sess.run(prediction,feed_dict=feed_dict)
-		[corr,total_pix,per_class1,per_class2]=transform_labels_perclass(pred,test_label_batch,match_labels,num_classes)
-
+		[corr,total_pix,per_class1,per_class2]=transform_labels_perclass(pred,test_label_batch,num_classes)
 		viz=np.zeros([pred.shape[0]]+image_size)
-                for cl in range(num_classes):
-                	t=np.where(pred==cl)
-                	viz[t]=colors[cl,:]
+		for cl in range(num_classes):
+			t=np.where(pred==cl)
+			viz[t]=colors[cl,:]
 
 		acc=corr*1.0/total_pix
 		s_test=s_test+acc
@@ -592,9 +609,74 @@ def test_segnet():
 		print per_class2
 		print 'epoch:',reader_test.epoch+1,', Batch:',reader_test.batch_num, ', correct pixels:', corr, ', Accuracy:',acc,'Aggregate_acc:',agg_acc
 		print '\n'
-		sp.imsave('outimgs-'+'retrain_4layer_moment'+'-%d-%f.png'%(reader_test.batch_num,acc),viz[0,:])
-		sp.imsave('outimgs_real-'+'retrain_4layer_moment'+'-%d-%f.png'%(reader_test.batch_num,acc),test_data_batch[0,:])
+		# sp.imsave('outimgs-'+'retrain_4layer_moment'+'-%d-%f.png'%(reader_test.batch_num,acc),viz[0,:])
+		# sp.imsave('outimgs_real-'+'retrain_4layer_moment'+'-%d-%f.png'%(reader_test.batch_num,acc),test_data_batch[0,:])
 	
+
+def test_models(trial=1):
+	path='/home/sriram/intern/models-trial1'
+
+	n_layers=7
+	path1=os.path.join(path,'retrain-'+str(n_layers)+'layer-output')
+
+	num_classes=8
+	batch_size_test=1
+	#test_data_dir='SegNet-Tutorial/CamVid/test/'
+	#test_label_dir='SegNet-Tutorial/CamVid/testannot/'
+	test_data_dir=os.path.join(BASE_DIR,'datasets/data/data-with-labels/lej15/testing_set/images/')
+	test_label_dir=os.path.join(BASE_DIR,'datasets/data/data-with-labels/lej15/testing_set/new_labels/')
+
+	# test_data_dir='/home/sriram/intern/datasets/pascal/VOC2011/jpeg_images/'
+	# test_label_dir='/home/sriram/intern/datasets/pascal/VOC2011/labels/'
+	reader_test=image_reader(test_data_dir,test_label_dir,batch_size_test,image_size=[360,480,3])
+	image_size=reader_test.image_size
+
+	sess=tf.Session()
+	test_data = tf.placeholder(tf.float32,shape=[batch_size_test, image_size[0], image_size[1], image_size[2]])
+	test_labels = tf.placeholder(tf.int64, shape=[batch_size_test, image_size[0], image_size[1]])
+
+	net=Segnet(keep_prob=0.5,num_classes=num_classes,is_gpu=True,weights_path=os.path.join(BASE_DIR,'segnet_road.h5'))
+	test_logits=net.inference(test_data,is_training=False,reuse=False);
+	print 'built network';
+	prediction=tf.argmax(test_logits,axis=3)
+
+
+	#net.rt['argmax']=prediction
+	# accuracy=tf.size(tf.where(prediction==test_labels)[0]);
+	print 'built loss graph'
+	sess.run(tf.global_variables_initializer())
+	print 'initialized vars'
+	moment_vars=[]
+	for var in tf.global_variables():
+		if('moving_mean' in var.name or 'moving_variance' in var.name):
+			moment_vars.append(var)
+	saver=tf.train.Saver(tf.trainable_variables()+moment_vars)
+	
+	for name in os.listdir(path1):
+		path2=os.path.join(path1,name,'trial'+str(trial))
+		modelfile_name=os.path.join(path2,'modelfile_7layer')
+		epoch_number=98
+		saver.restore(sess,os.path.join(path,modelfile_name)+'-'+str(epoch_number))
+		s_test=0;count_test=1
+		while(reader_test.batch_num<reader_test.n_batches):
+			[test_data_batch,test_label_batch]=reader_test.next_batch();
+			feed_dict={test_data:test_data_batch,test_labels:test_label_batch};
+			pred=sess.run(prediction,feed_dict=feed_dict)
+			[corr,total_pix]=transform_labels(pred,test_label_batch,num_classes)
+			# viz=np.zeros([pred.shape[0]]+image_size)
+			# for cl in range(num_classes):
+			# 	t=np.where(pred==cl)
+			# 	viz[t]=colors[cl,:]
+
+			acc=corr*1.0/total_pix
+			s_test=s_test+acc
+			agg_acc=s_test/count_test
+			count_test+=1
+			print 'epoch:',reader_test.epoch+1,', Batch:',reader_test.batch_num, ', correct pixels:', corr, ', Accuracy:',acc,'Aggregate_acc:',agg_acc
+			print '\n'
+			# sp.imsave('outimgs-'+'retrain_4layer_moment'+'-%d-%f.png'%(reader_test.batch_num,acc),viz[0,:])
+			# sp.imsave('outimgs_real-'+'retrain_4layer_moment'+'-%d-%f.png'%(reader_test.batch_num,acc),test_data_batch[0,:])
+		
 
 def viz(pred,test_label_batch,num_classes):
 	viz=np.zeros([pred.shape[0]]+image_size)
@@ -813,57 +895,63 @@ if __name__=="__main__":
 		print "Enter -trial option"
 		sys.exit()
 
-	n_layers=8	
+	n_layers=8
 	if args.devbox:
 	  BASE_DIR = '/root/segnet_vgg16'
 	  os.environ['CUDA_VISIBLE_DEVICES']=str(args.ngpu)
 	  print os.system('echo CUDA_VISBLE_DEVICES')
 	else:
 	  BASE_DIR = '/home/sriram/intern'
-	  os.environ['CUDA_VISIBLE_DEVICES']=""
+	  os.environ['CUDA_VISIBLE_DEVICES']="0"
 	lis=['full','half','third','quarter']
-	mfile_outdirs=['retrain-8layer-output/'+i+'-training/trial'+str(args.trial)+'/' for i in lis]
+	mfile_outdirs=['retrain-'+str(n_layers)+'layer-output/'+i+'-training/trial'+str(args.trial)+'/' for i in lis]
 	mfile_names=['modelfile_'+i+str(n_layers)+'layer'for i in lis]
 	lfile_names=['logfile_'+i+str(n_layers)+'layer' for i in lis]
 
-        train_data_dir=os.path.join(BASE_DIR,'datasets/data/data-with-labels/lej15/trial%d/training_set/images/'%args.trial)
-        train_label_dir=os.path.join(BASE_DIR,'datasets/data/data-with-labels/lej15/trial%d/training_set/new_labels/'%args.trial)
-        test_data_dir=os.path.join(BASE_DIR,'datasets/data/data-with-labels/lej15/trial%d/val_set/images/'%args.trial)
-        test_label_dir=os.path.join(BASE_DIR,'datasets/data/data-with-labels/lej15/trial%d/val_set/new_labels/'%args.trial)
+	train_data_dir=os.path.join(BASE_DIR,'datasets/data/data-with-labels/lej15/trial%d/training_set/images/'%args.trial)
+	train_label_dir=os.path.join(BASE_DIR,'datasets/data/data-with-labels/lej15/trial%d/training_set/new_labels/'%args.trial)
+	test_data_dir=os.path.join(BASE_DIR,'datasets/data/data-with-labels/lej15/trial%d/val_set/images/'%args.trial)
+	test_label_dir=os.path.join(BASE_DIR,'datasets/data/data-with-labels/lej15/trial%d/val_set/new_labels/'%args.trial)
 	
 
 	total=len(os.listdir(train_data_dir))
+	print 'total imgs',total
 	tr_num=[int(total),int(total/2),int(total/3),int(total/4)]
 	scratch_train_data_dir=os.path.abspath('./scratch_train_data_dir'+str(n_layers))
-        scratch_train_label_dir=os.path.abspath('./scratch_train_label_dir'+str(n_layers))
-	if not os.path.isdir(scratch_train_data_dir):
-        	os.makedirs(scratch_train_data_dir)
-        if not os.path.isdir(scratch_train_label_dir):
-        	os.makedirs(scratch_train_label_dir)
+	scratch_train_label_dir=os.path.abspath('./scratch_train_label_dir'+str(n_layers))
+	if os.path.isdir(scratch_train_data_dir):
+		shutil.rmtree(scratch_train_data_dir)
+	if os.path.isdir(scratch_train_label_dir):
+		shutil.rmtree(scratch_train_label_dir)
 
 	for modelfile_name,logfile_name,n_train_samples,outdir in zip(mfile_names,lfile_names,tr_num,mfile_outdirs):
+		print n_train_samples
+		print modelfile_name
+		print logfile_name
 		outdir = os.path.join(os.getcwd(),outdir)
 		if not os.path.isdir(outdir):
 			os.system('mkdir -p %s'%outdir)
-	
-        
-	
-        		
-		if(len(os.listdir(scratch_train_data_dir))!=0):
-			for name in os.listdir(scratch_train_data_dir):
-				os.remove(os.path.join(scratch_train_data_dir,name))
-		if(len(os.listdir(scratch_train_label_dir))!=0):
-			for name in os.listdir(scratch_train_label_dir):
-				os.remove(os.path.join(scratch_train_label_dir,name))
 
-		rand_index=np.random.randint(0,total,[n_train_samples])
+		if os.path.isdir(scratch_train_data_dir):
+                	shutil.rmtree(scratch_train_data_dir)
+        	if os.path.isdir(scratch_train_label_dir):
+                	shutil.rmtree(scratch_train_label_dir)
+		os.makedirs(scratch_train_data_dir)
+		os.makedirs(scratch_train_label_dir)
+		rand_index=range(total)
+		np.random.shuffle(rand_index)
+		rand_index=rand_index[:n_train_samples]
+		#rand_index=np.random.randint(0,total,[n_train_samples])
+		#print 'rand lenght', np.unique(rand_index).size
 		image_filenames=np.array(fnmatch.filter(os.listdir(train_data_dir),'*.png'))[rand_index]
+		#print np.unique(image_filenames).size
 		for name in image_filenames:
 			shutil.copy(os.path.join(train_data_dir,name),scratch_train_data_dir)
 			shutil.copy(os.path.join(train_label_dir,name),scratch_train_label_dir)
 		
-		train_segnet(os.path.join(outdir,modelfile_name),os.path.join(outdir,logfile_name),scratch_train_data_dir,scratch_train_label_dir)
+		train_segnet(os.path.join(outdir,modelfile_name),os.path.join(outdir,logfile_name),scratch_train_data_dir,scratch_train_label_dir,test_data_dir,test_label_dir,outdir)
 		tf.reset_default_graph()
 
-	#test_segnet()
+	# test_segnet()
 	#train_segnet()
+	# test_models()
